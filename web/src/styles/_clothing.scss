@@ -222,3 +222,24 @@
   letter-spacing: 0.045vh;
   text-transform: uppercase;
 }
+
+// Driver-only physical Contact and ECU/OBD ports, side by side.
+.vehicle-ports {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1.1vh;
+}
+.ecu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.463vh;
+}
+.ecu-label {
+  color: var(--ox-text-2);
+  font-size: var(--ox-fs-micro);
+  letter-spacing: 0.045vh;
+  text-transform: uppercase;
+}
