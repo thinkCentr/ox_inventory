@@ -1593,6 +1593,23 @@ exports('BindIgnitionPick', function(vehicle, revision)
     return matchesIgnition(ignition.items[1], ignition.vehicleId, revision) == true
 end)
 
+exports('DamageIgnitionPick', function(vehicle, damage)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' or type(damage) ~= 'number'
+        or damage <= 0 or damage > 100 then return false end
+    local ignition = loadIgnition(vehicle)
+    if not ignition or ignitionStorage[ignition.id] or activeSlots[ignition.id .. ':1'] then return false end
+    local item = ignition.items[1]
+    if not item or not PICK_ITEMS[item.name] or (item.metadata and item.metadata.bound) then return false end
+    local durability = tonumber(item.metadata and item.metadata.durability) or 100
+    if durability <= damage then
+        return Inventory.RemoveItem(ignition.id, item.name, 1, item.metadata, 1, false, true) == true
+    end
+    local metadata = table.clone(item.metadata or {})
+    metadata.durability = math.max(1, durability - damage)
+    Inventory.SetMetadata(ignition.id, 1, metadata)
+    return true
+end)
+
 ---The ignition of the vehicle this player is driving. Re-checked on every use, so a passenger or
 ---someone who has left the seat can never reach it.
 ---@param inv OxInventory?
