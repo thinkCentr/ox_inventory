@@ -26,9 +26,11 @@ export const setupInventoryReducer: CaseReducer<
     rightInventory?: Inventory;
     backpackInventory?: Inventory;
     containerInventory?: Inventory;
+    ignitionInventory?: Inventory;
+    ecuInventory?: Inventory;
   }>
 > = (state, action) => {
-  const { leftInventory, rightInventory, backpackInventory, containerInventory } = action.payload;
+  const { leftInventory, rightInventory, backpackInventory, containerInventory, ignitionInventory, ecuInventory } = action.payload;
   const curTime = Math.floor(Date.now() / 1000);
 
   if (leftInventory)
@@ -60,6 +62,13 @@ export const setupInventoryReducer: CaseReducer<
   } else if (state.containerInventory.id !== '') {
     state.containerInventory = createEmptyInventory();
   }
+
+  state.ignitionInventory = ignitionInventory
+    ? { ...ignitionInventory, items: densifyItems(ignitionInventory, curTime) }
+    : createEmptyInventory();
+  state.ecuInventory = ecuInventory
+    ? { ...ecuInventory, items: densifyItems(ecuInventory, curTime) }
+    : createEmptyInventory();
 
   state.shiftPressed = false;
   state.isBusy = false;
