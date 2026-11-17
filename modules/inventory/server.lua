@@ -42,10 +42,12 @@ function OxInventory:closeInventory(noEvent)
 	if container then container.openedBy[self.id] = nil end
 
 	local ignition = self.ignition and Inventories[self.ignition]
+	local ecu = self.ecu and Inventories[self.ecu]
 
 	if ignition then ignition.openedBy[self.id] = nil end
+	if ecu then ecu.openedBy[self.id] = nil end
 
-	self.ignition = nil
+	self.ignition, self.ecu = nil, nil
 	inv.openedBy[self.id] = nil
 	inv:set('open', false)
 	self.open = false
@@ -835,7 +837,7 @@ function Inventory.Create(id, label, invType, slots, weight, maxWeight, owner, i
 
 	if invType == 'player' then
 		slots = (slots or 0) + Grid.getReservedCount()
-	elseif invType ~= 'shop' and invType ~= 'crafting' and invType ~= 'ignition' then
+	elseif invType ~= 'shop' and invType ~= 'crafting' and invType ~= 'ignition' and invType ~= 'ecu' then
 		slots = Grid.scaleContainerSlots(slots, gridRows)
 	end
 
@@ -1491,7 +1493,9 @@ AddEventHandler('entityRemoved', function(vehicle)
     entities[id] = nil
     if kind == 'temporary' then
         local ignition = Inventories['shift:ignition:' .. id]
+        local ecu = Inventories['shift:ecu:' .. id]
         if ignition then Inventory.Remove(ignition) end
+        if ecu then Inventory.Remove(ecu) end
     end
 end)
 
@@ -1534,6 +1538,36 @@ local function loadIgnition(vehicle)
         return ignition
     end
 end
+
+-- Physical ECU/OBD port. Owned vehicles persist their plugged tool; temporary traffic does not.
+local function loadEcu(vehicle)
+    local id = vehicleIds[vehicle]
+    if not id or not DoesEntityExist(vehicle) then return end
+    local invId = 'shift:ecu:' .. tostring(id)
+    local ecu = Inventories[invId]
+    if not ecu and not loading[invId] then
+        loading[invId] = true
+        local guard <close> = defer(function() loading[invId] = nil end)
+        if vehicleKinds[vehicle] == 'temporary' then
+            ecu = Inventory.Create(invId, 'ECU / OBD', 'ecu', 1, 0, 2000, false, {})
+            if ecu then ecu.datastore = true end
+        else
+            ecu = Inventory.Create(invId, 'ECU / OBD', 'ecu', 1, 0, 2000, false)
+        end
+    end
+    if ecu and vehicleIds[vehicle] == id then
+        ecu.vehicleId = id
+        ecu.time = os.time()
+        return ecu
+    end
+end
+
+exports('HasInsertedEcuProgrammer', function(vehicle)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' then return false end
+    local ecu = loadEcu(vehicle)
+    local tool = ecu and ecu.items[1]
+    return tool ~= nil and tool.name == 'ecu_programmer' and tool.count == 1
+end)
 
 function Inventory.HasIgnitionKey(vehicle)
     local ignition = loadIgnition(vehicle)
@@ -1627,31 +1661,38 @@ function Inventory.GetIgnition(inv)
 	return ignition, vehicle
 end
 
----Attach the ignition to a player opening their inventory, or tell the client there is none.
+---Attach both vehicle ports atomically to the driver. Only the server can bind them.
 ---@param inv OxInventory
-function Inventory.OpenIgnition(inv)
-	local previous = inv.ignition and Inventories[inv.ignition]
-	if previous then previous.openedBy[inv.id] = nil end
-	inv.ignition = nil
+function Inventory.OpenVehicleInterfaces(inv)
+    local oldIgnition = inv.ignition and Inventories[inv.ignition]
+    local oldEcu = inv.ecu and Inventories[inv.ecu]
+    if oldIgnition then oldIgnition.openedBy[inv.id] = nil end
+    if oldEcu then oldEcu.openedBy[inv.id] = nil end
+    inv.ignition, inv.ecu = nil, nil
 
-	local ignition = Inventory.GetIgnition(inv)
+    local ignition, vehicle = Inventory.GetIgnition(inv)
+    local ecu = ignition and loadEcu(vehicle)
+    local function describe(port)
+        return port and {
+            id = port.id, label = port.label, type = port.type,
+            slots = port.slots, weight = port.weight,
+            maxWeight = port.maxWeight, items = port.items,
+        } or nil
+    end
 
-	if not ignition then
-		return TriggerClientEvent('ox_inventory:setIgnition', inv.id, nil)
-	end
+    if ignition then
+        ignition.openedBy[inv.id] = true
+        inv.ignition = ignition.id
+    end
+    if ecu then
+        ecu.openedBy[inv.id] = true
+        inv.ecu = ecu.id
+    end
 
-	ignition.openedBy[inv.id] = true
-	inv.ignition = ignition.id
-
-	TriggerClientEvent('ox_inventory:setIgnition', inv.id, {
-		id = ignition.id,
-		label = ignition.label,
-		type = 'ignition',
-		slots = ignition.slots,
-		weight = ignition.weight,
-		maxWeight = ignition.maxWeight,
-		items = ignition.items,
-	})
+    local ignitionData, ecuData = describe(ignition), describe(ecu)
+    TriggerClientEvent('ox_inventory:setIgnition', inv.id, ignitionData)
+    TriggerClientEvent('ox_inventory:setEcu', inv.id, ecuData)
+    return ignitionData, ecuData
 end
 
 ---@param inv inventory
@@ -2346,6 +2387,9 @@ local function syncAddress(inventory, playerInventory)
 	if playerInventory.ignition and inventory.id == playerInventory.ignition then
 		return 'ignition'
 	end
+	if playerInventory.ecu and inventory.id == playerInventory.ecu then
+		return 'ecu'
+	end
 
 	return inventory.id
 end
@@ -2537,9 +2581,12 @@ local function resolveSwapEndpoint(playerInventory, invType)
 
 	if invType == 'ignition' then
 		local ignition = Inventory.GetIgnition(playerInventory)
-
-		-- Only the ignition this inventory was opened with; a seat change mid-session closes it off.
 		return ignition and ignition.id == playerInventory.ignition and ignition or nil
+	end
+	if invType == 'ecu' then
+		local _, vehicle = Inventory.GetIgnition(playerInventory)
+		local ecu = vehicle and loadEcu(vehicle)
+		return ecu and ecu.id == playerInventory.ecu and ecu or nil
 	end
 
 	return Inventory(playerInventory.open)
@@ -2640,6 +2687,14 @@ lib.callback.register('ox_inventory:swapItems', function(source, data)
 			if data.toType ~= 'player' or toInventory ~= playerInventory or toData
 				or not canPlaceInIgnition(fromData, fromInventory.vehicleId) then return false end
 		end
+
+        if toInventory.type == 'ecu' then
+            if data.fromType ~= 'player' or fromInventory ~= playerInventory or toData
+                or fromData.name ~= 'ecu_programmer' or fromData.count ~= 1 then return false end
+        elseif fromInventory.type == 'ecu' then
+            if data.toType ~= 'player' or toInventory ~= playerInventory or toData
+                or fromData.name ~= 'ecu_programmer' or fromData.count ~= 1 then return false end
+        end
 
         if data.toType == 'newdrop' then
             local dropped, response = dropItem(source, playerInventory, fromInventory, fromData, data)
@@ -3413,35 +3468,35 @@ local isSaving = false
 local storageSequence = 0
 
 exports('BeginIgnitionStorage', function(vehicle, vehicleId)
-	local caller = GetInvokingResource()
-	if caller ~= 'tc_garages' or vehicleIds[vehicle] ~= vehicleId or isSaving then return end
-
-	local ignition = loadIgnition(vehicle)
-	if not ignition or vehicleIds[vehicle] ~= vehicleId or isSaving
-		or ignitionStorage[ignition.id] or activeSlots[ignition.id .. ':1'] then return end
-
-	storageSequence += 1
-	local entry = { caller = caller, token = storageSequence, vehicle = vehicle }
-	ignitionStorage[ignition.id] = entry
-
-	local ok, affected = pcall(db.flushStash, ignition.owner, ignition.dbId, json.encode(ignition:minimal()))
-	if not ok or type(affected) ~= 'number' or ignitionStorage[ignition.id] ~= entry or vehicleIds[vehicle] ~= vehicleId then
-		if ignitionStorage[ignition.id] == entry then ignitionStorage[ignition.id] = nil end
-		return
-	end
-
-	ignition.changed = false
-	return entry.token
+    local caller = GetInvokingResource()
+    if caller ~= 'tc_garages' or vehicleIds[vehicle] ~= vehicleId or isSaving then return end
+    local ignition, ecu = loadIgnition(vehicle), loadEcu(vehicle)
+    if not ignition or not ecu or vehicleIds[vehicle] ~= vehicleId or isSaving then return end
+    for _, port in ipairs({ ignition, ecu }) do
+        if ignitionStorage[port.id] or activeSlots[port.id .. ':1'] then return end
+    end
+    storageSequence += 1
+    local entry = { caller = caller, token = storageSequence, vehicle = vehicle }
+    ignitionStorage[ignition.id], ignitionStorage[ecu.id] = entry, entry
+    for _, port in ipairs({ ignition, ecu }) do
+        local ok, affected = pcall(db.flushStash, port.owner, port.dbId, json.encode(port:minimal()))
+        if not ok or type(affected) ~= 'number' or vehicleIds[vehicle] ~= vehicleId
+            or ignitionStorage[port.id] ~= entry then
+            ignitionStorage[ignition.id], ignitionStorage[ecu.id] = nil, nil
+            return
+        end
+        port.changed = false
+    end
+    return entry.token
 end)
 
 exports('EndIgnitionStorage', function(vehicle, token)
-	local caller = GetInvokingResource()
-	for id, entry in pairs(ignitionStorage) do
-		if entry.vehicle == vehicle and entry.token == token and entry.caller == caller then
-			ignitionStorage[id] = nil
-			return
-		end
-	end
+    local caller = GetInvokingResource()
+    for id, entry in pairs(ignitionStorage) do
+        if entry.vehicle == vehicle and entry.token == token and entry.caller == caller then
+            ignitionStorage[id] = nil
+        end
+    end
 end)
 
 AddEventHandler('onResourceStop', function(resource)
@@ -3490,7 +3545,7 @@ local function saveInventories(clearInventories)
 
     for _, inv in pairs(Inventories) do
         if not inv.open and not inv.player and not ignitionStorage[inv.id]
-            and not (inv.type == 'ignition' and inv.datastore) then
+            and not (inv.datastore and (inv.type == 'ignition' or inv.type == 'ecu')) then
             -- clear inventory from memory if unused for x minutes, or on entity/netid mismatch
             if inv.type == 'glovebox' or inv.type == 'trunk' then
                 if NetworkGetEntityFromNetworkId(inv.netid) ~= inv.entityId then
