@@ -137,6 +137,7 @@ end)
 
 ---@type string? id of the ignition attached to the open inventory, only ever set for the driver
 local currentIgnition
+local currentEcu
 
 ---The server attaches the ignition each time the inventory opens; `nil` means not the driver.
 RegisterNetEvent('ox_inventory:setIgnition', function(data)
@@ -148,6 +149,12 @@ RegisterNetEvent('ox_inventory:setIgnition', function(data)
         action = 'setIgnition',
         data = data or false
     })
+end)
+
+RegisterNetEvent('ox_inventory:setEcu', function(data)
+    if source == '' then return end
+    currentEcu = data and data.id or nil
+    SendNUIMessage({ action = 'setEcu', data = data or false })
 end)
 
 ---@param inv string?
@@ -330,6 +337,9 @@ function client.openInventory(inv, data)
     Utils.previewPedIn()
 
     currentInventory = right or defaultInventory
+    -- Atomic payload prevents the Contact disappearing when an early event races NUI setup.
+    currentIgnition = left.ignitionInventory and left.ignitionInventory.id or nil
+    currentEcu = left.ecuInventory and left.ecuInventory.id or nil
     left.items = PlayerData.inventory
     left.groups = PlayerData.groups
 
@@ -338,7 +348,9 @@ function client.openInventory(inv, data)
         data = {
             leftInventory = left,
             rightInventory = currentInventory,
-            backpackInventory = backpackInventory
+            backpackInventory = backpackInventory,
+            ignitionInventory = left.ignitionInventory,
+            ecuInventory = left.ecuInventory
         }
     })
 
@@ -985,6 +997,7 @@ function client.closeInventory(server)
 		invOpen = nil
 		currentContainer = nil
 		currentIgnition = nil
+        currentEcu = nil
 		SetNuiFocus(false, false)
 		SetNuiFocusKeepInput(false)
 		Utils.blurOut()
@@ -1010,9 +1023,14 @@ end
 RegisterNetEvent('ox_inventory:closeInventory', client.closeInventory)
 
 local function clearIgnitionContext()
-    if not currentIgnition then return end
-    currentIgnition = nil
-    SendNUIMessage({ action = 'setIgnition', data = false })
+    if currentIgnition then
+        currentIgnition = nil
+        SendNUIMessage({ action = 'setIgnition', data = false })
+    end
+    if currentEcu then
+        currentEcu = nil
+        SendNUIMessage({ action = 'setEcu', data = false })
+    end
 end
 
 lib.onCache('vehicle', clearIgnitionContext)
@@ -1065,6 +1083,8 @@ local function updateInventory(data, weight)
 			v.inventory = 'container'
 		elseif currentIgnition and v.inventory == currentIgnition then
 			v.inventory = 'ignition'
+        elseif currentEcu and v.inventory == currentEcu then
+            v.inventory = 'ecu'
 		end
 	end
 
