@@ -13,7 +13,7 @@ import { getBooleanPref } from '../../store/preferences';
 import { EcuIcon } from '../utils/icons';
 import ItemImage from '../utils/ItemImage';
 
-// The server validates the exact vehicle ID, bound pick and security revision.
+// Only the ECU programmer is accepted; the server checks the vehicle-bound port.
 const ECU_ITEMS = new Set(['ecu_programmer']);
 const ECU_SLOT = 1;
 
