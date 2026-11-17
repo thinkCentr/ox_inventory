@@ -15,6 +15,7 @@ const initialState: State = {
   backpackInventory: createEmptyInventory(),
   containerInventory: createEmptyInventory(),
   ignitionInventory: createEmptyInventory(),
+  ecuInventory: createEmptyInventory(),
   additionalMetadata: new Array(),
   itemAmount: 0,
   shiftPressed: false,
@@ -80,6 +81,20 @@ export const inventorySlice = createSlice({
         }),
       };
     },
+    setEcuInventory: (state, action: PayloadAction<Inventory | null | undefined>) => {
+      const payload = action.payload;
+      if (!payload) {
+        if (state.ecuInventory.id !== '') state.ecuInventory = createEmptyInventory();
+        return;
+      }
+      state.ecuInventory = {
+        ...payload,
+        items: Array.from(Array(payload.slots), (_, index) => {
+          const item = Object.values(payload.items).find((entry) => entry?.slot === index + 1);
+          return item || { slot: index + 1 };
+        }),
+      };
+    },
     setContainerWeight: (state, action: PayloadAction<number>) => {
       const container = state.leftInventory.items.find((item) => item.metadata?.container === state.rightInventory.id);
 
@@ -98,6 +113,7 @@ export const inventorySlice = createSlice({
         backpackInventory: current(state.backpackInventory),
         containerInventory: current(state.containerInventory),
         ignitionInventory: current(state.ignitionInventory),
+        ecuInventory: current(state.ecuInventory),
       };
     });
     builder.addMatcher(isFulfilled, (state) => {
@@ -110,13 +126,15 @@ export const inventorySlice = createSlice({
         state.history.rightInventory &&
         state.history.backpackInventory &&
         state.history.containerInventory &&
-        state.history.ignitionInventory
+        state.history.ignitionInventory &&
+        state.history.ecuInventory
       ) {
         state.leftInventory = state.history.leftInventory;
         state.rightInventory = state.history.rightInventory;
         state.backpackInventory = state.history.backpackInventory;
         state.containerInventory = state.history.containerInventory;
         state.ignitionInventory = state.history.ignitionInventory;
+        state.ecuInventory = state.history.ecuInventory;
       }
       state.isBusy = false;
     });
@@ -135,6 +153,7 @@ export const {
   setContainerWeight,
   setContainerInventory,
   setIgnitionInventory,
+  setEcuInventory,
 } = inventorySlice.actions;
 export const selectLeftInventory = (state: RootState) => state.inventory.leftInventory;
 export const selectRightInventory = (state: RootState) => state.inventory.rightInventory;
@@ -142,6 +161,7 @@ export const selectBackpackInventory = (state: RootState) => state.inventory.bac
 export const hasBackpack = (state: RootState) => state.inventory.backpackInventory.id !== '';
 export const selectContainerInventory = (state: RootState) => state.inventory.containerInventory;
 export const selectIgnitionInventory = (state: RootState) => state.inventory.ignitionInventory;
+export const selectEcuInventory = (state: RootState) => state.inventory.ecuInventory;
 export const selectItemAmount = (state: RootState) => state.inventory.itemAmount;
 export const selectIsBusy = (state: RootState) => state.inventory.isBusy;
 
