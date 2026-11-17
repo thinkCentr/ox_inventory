@@ -13,7 +13,7 @@ interface Payload {
   slotsData?: { inventoryId: string; slots: number };
 }
 
-type InventoryKey = 'leftInventory' | 'rightInventory' | 'backpackInventory' | 'containerInventory';
+type InventoryKey = 'leftInventory' | 'rightInventory' | 'backpackInventory' | 'containerInventory' | 'ignitionInventory';
 
 const resolveInventoryKey = (state: State, inventoryId: string): InventoryKey | null =>
   inventoryId === state.leftInventory.id
@@ -24,6 +24,8 @@ const resolveInventoryKey = (state: State, inventoryId: string): InventoryKey | 
     ? 'backpackInventory'
     : state.containerInventory.id !== '' && inventoryId === state.containerInventory.id
     ? 'containerInventory'
+    : state.ignitionInventory.id !== '' && inventoryId === state.ignitionInventory.id
+    ? 'ignitionInventory'
     : null;
 
 export const refreshSlotsReducer: CaseReducer<State, PayloadAction<Payload>> = (state, action) => {

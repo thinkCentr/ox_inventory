@@ -1,4 +1,14 @@
 return {
+    ['vehicle_key'] = {
+        label = 'Clé de véhicule',
+        weight = 50,
+        stack = false,
+        close = false,
+        grid = { 1, 1 },
+        consume = 0,
+        client = { image = 'carkey.png' },
+    },
+
     ['paper_map'] = {
         label = 'Map',
         rarity = 'uncommon',

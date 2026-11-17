@@ -784,6 +784,8 @@ local function openInventory(source, invType, data, ignoreSecurityChecks)
 		left:openInventory(left)
 	end
 
+	Inventory.OpenIgnition(left)
+
 	return {
 		id = left.id,
 		label = left.label,

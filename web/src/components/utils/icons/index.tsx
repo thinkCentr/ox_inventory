@@ -135,3 +135,12 @@ export const CheckIcon: React.FC = () => (
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </svg>
 );
+
+export const KeyIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className={className} {...strokeProps} aria-hidden="true">
+    <circle cx="7.5" cy="15.5" r="4" />
+    <path d="m10.5 12.5 9-9" />
+    <path d="m16 7 2.5 2.5" />
+    <path d="m13.5 9.5 2 2" />
+  </svg>
+);

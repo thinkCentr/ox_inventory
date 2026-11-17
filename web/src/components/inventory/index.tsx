@@ -3,9 +3,10 @@ import useNuiEvent from '../../hooks/useNuiEvent';
 import InventoryControl from './InventoryControl';
 import SettingsPanel from './SettingsPanel';
 import InventoryHotbar from './InventoryHotbar';
+import IgnitionSlot from './IgnitionSlot';
 import ClothingPanel from './ClothingPanel';
 import { useAppDispatch } from '../../store';
-import { refreshSlots, setAdditionalMetadata, setContainerInventory, setupInventory } from '../../store/inventory';
+import { refreshSlots, setIgnitionInventory, setAdditionalMetadata, setContainerInventory, setupInventory } from '../../store/inventory';
 import { useExitListener } from '../../hooks/useExitListener';
 import type { Inventory as InventoryProps } from '../../typings';
 import BackpackInventory, { useShowBackpack } from './BackpackInventory';
@@ -31,6 +32,7 @@ const Inventory: React.FC = () => {
   useNuiEvent<boolean>('setInventoryVisible', setInventoryVisible);
   useNuiEvent<false>('closeInventory', () => {
     setInventoryVisible(false);
+    dispatch(setIgnitionInventory(null));
     dispatch(closeContextMenu());
     dispatch(closeTooltip());
   });
@@ -48,6 +50,10 @@ const Inventory: React.FC = () => {
 
   useNuiEvent<InventoryProps | null | undefined>('setContainer', (data) => {
     dispatch(setContainerInventory(data ?? null));
+  });
+
+  useNuiEvent<InventoryProps | false>('setIgnition', (data) => {
+    dispatch(setIgnitionInventory(data || null));
   });
 
   useNuiEvent('refreshSlots', (data) => dispatch(refreshSlots(data)));
@@ -75,6 +81,7 @@ const Inventory: React.FC = () => {
 
             <div className="inventory-centre">
               {pedFocus && <ClothingPanel />}
+              <IgnitionSlot />
               <InventoryControl />
             </div>
 

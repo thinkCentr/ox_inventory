@@ -135,6 +135,21 @@ RegisterNetEvent('ox_inventory:setBackpack', function(data)
     end
 end)
 
+---@type string? id of the ignition attached to the open inventory, only ever set for the driver
+local currentIgnition
+
+---The server attaches the ignition each time the inventory opens; `nil` means not the driver.
+RegisterNetEvent('ox_inventory:setIgnition', function(data)
+    if source == '' then return end
+
+    currentIgnition = data and data.id or nil
+
+    SendNUIMessage({
+        action = 'setIgnition',
+        data = data or false
+    })
+end)
+
 ---@param inv string?
 ---@param data any?
 ---@return boolean?
@@ -969,6 +984,7 @@ function client.closeInventory(server)
 	if invOpen then
 		invOpen = nil
 		currentContainer = nil
+		currentIgnition = nil
 		SetNuiFocus(false, false)
 		SetNuiFocusKeepInput(false)
 		Utils.blurOut()
@@ -1036,6 +1052,8 @@ local function updateInventory(data, weight)
 			backpackInventory.items[item.slot] = item.count and item or nil
 		elseif currentContainer and v.inventory == currentContainer.id then
 			v.inventory = 'container'
+		elseif currentIgnition and v.inventory == currentIgnition then
+			v.inventory = 'ignition'
 		end
 	end
 

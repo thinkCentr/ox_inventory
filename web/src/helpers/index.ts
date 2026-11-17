@@ -151,6 +151,7 @@ export const hasContainerPanel = (state: State): boolean =>
 export const resolveInventoryPanel = (state: State, type: Inventory['type']): Inventory => {
   if (type === InventoryType.PLAYER) return state.leftInventory;
   if (type === InventoryType.BACKPACK) return state.backpackInventory;
+  if (type === InventoryType.IGNITION && state.ignitionInventory.id !== '') return state.ignitionInventory;
   if (type === InventoryType.CONTAINER && hasContainerPanel(state)) return state.containerInventory;
 
   return state.rightInventory;

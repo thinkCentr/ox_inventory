@@ -207,3 +207,18 @@
 .clothes-slot-wrap {
   display: contents;
 }
+
+// Driver-only ignition slot under the use/give rail; reuses the clothing slot look.
+.ignition {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.463vh;
+}
+
+.ignition-label {
+  color: var(--ox-text-2);
+  font-size: var(--ox-fs-micro);
+  letter-spacing: 0.045vh;
+  text-transform: uppercase;
+}

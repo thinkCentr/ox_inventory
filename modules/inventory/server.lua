@@ -41,6 +41,11 @@ function OxInventory:closeInventory(noEvent)
 
 	if container then container.openedBy[self.id] = nil end
 
+	local ignition = self.ignition and Inventories[self.ignition]
+
+	if ignition then ignition.openedBy[self.id] = nil end
+
+	self.ignition = nil
 	inv.openedBy[self.id] = nil
 	inv:set('open', false)
 	self.open = false
@@ -830,7 +835,7 @@ function Inventory.Create(id, label, invType, slots, weight, maxWeight, owner, i
 
 	if invType == 'player' then
 		slots = (slots or 0) + Grid.getReservedCount()
-	elseif invType ~= 'shop' and invType ~= 'crafting' then
+	elseif invType ~= 'shop' and invType ~= 'crafting' and invType ~= 'ignition' then
 		slots = Grid.scaleContainerSlots(slots, gridRows)
 	end
 
@@ -1449,6 +1454,106 @@ function Inventory.GetContainerPayload(inv)
 		maxWeight = container.maxWeight,
 		items = container.items,
 	}
+end
+
+local IGNITION_ITEM = 'vehicle_key'
+
+-- Bindings are created by trusted server callers after spawning an owned vehicle.
+local vehicleIds, entities, loading = {}, {}, {}
+
+exports('BindVehicleIgnition', function(vehicle, vehicleId)
+	if type(vehicleId) ~= 'number' or vehicleId < 1 or vehicleId % 1 ~= 0 then return false end
+	if not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then return false end
+	if vehicleIds[vehicle] and vehicleIds[vehicle] ~= vehicleId then return false end
+	if entities[vehicleId] and entities[vehicleId] ~= vehicle then return false end
+
+	vehicleIds[vehicle] = vehicleId
+	entities[vehicleId] = vehicle
+	return true
+end)
+
+AddEventHandler('entityRemoved', function(vehicle)
+	local id = vehicleIds[vehicle]
+	if not id then return end
+	vehicleIds[vehicle] = nil
+	entities[id] = nil
+end)
+
+local function matchesIgnition(key, vehicleId)
+	return key and key.name == IGNITION_ITEM and key.count == 1
+		and key.metadata and key.metadata.vehicleId == vehicleId
+end
+
+local function loadIgnition(vehicle)
+	local vehicleId = vehicleIds[vehicle]
+	if not vehicleId or not DoesEntityExist(vehicle) then return end
+
+	local id = ('shift:ignition:%d'):format(vehicleId)
+	local ignition = Inventories[id]
+
+	if not ignition and not loading[id] then
+		loading[id] = true
+		local guard <close> = defer(function() loading[id] = nil end)
+		ignition = Inventory.Create(id, 'Contact', 'ignition', 1, 0, 1000, false)
+	end
+
+	if ignition and vehicleIds[vehicle] == vehicleId then
+		ignition.vehicleId = vehicleId
+		ignition.time = os.time()
+		return ignition
+	end
+end
+
+function Inventory.HasIgnitionKey(vehicle)
+	local ignition = loadIgnition(vehicle)
+	return ignition ~= nil and matchesIgnition(ignition.items[1], ignition.vehicleId) == true
+end
+
+exports('HasIgnitionKey', Inventory.HasIgnitionKey)
+
+exports('GetIgnitionVehicleId', function(vehicle)
+	return vehicleIds[vehicle]
+end)
+
+---The ignition of the vehicle this player is driving. Re-checked on every use, so a passenger or
+---someone who has left the seat can never reach it.
+---@param inv OxInventory?
+---@return OxInventory?, number?
+function Inventory.GetIgnition(inv)
+	if not inv or not inv.player then return end
+
+	local ped = GetPlayerPed(inv.id)
+	local vehicle = ped ~= 0 and GetVehiclePedIsIn(ped, false) or 0
+
+	if vehicle == 0 or GetPedInVehicleSeat(vehicle, -1) ~= ped then return end
+
+	local ignition = loadIgnition(vehicle)
+	if GetVehiclePedIsIn(ped, false) ~= vehicle or GetPedInVehicleSeat(vehicle, -1) ~= ped then return end
+	return ignition, vehicle
+end
+
+---Attach the ignition to a player opening their inventory, or tell the client there is none.
+---@param inv OxInventory
+function Inventory.OpenIgnition(inv)
+	local ignition = Inventory.GetIgnition(inv)
+
+	if not ignition then
+		inv.ignition = nil
+		return TriggerClientEvent('ox_inventory:setIgnition', inv.id, nil)
+	end
+
+	ignition.openedBy[inv.id] = true
+	inv.ignition = ignition.id
+
+	TriggerClientEvent('ox_inventory:setIgnition', inv.id, {
+		id = ignition.id,
+		label = ignition.label,
+		type = 'ignition',
+		slots = ignition.slots,
+		weight = ignition.weight,
+		maxWeight = ignition.maxWeight,
+		items = ignition.items,
+	})
 end
 
 ---@param inv inventory
@@ -2140,6 +2245,10 @@ local function syncAddress(inventory, playerInventory)
 		return 'backpack'
 	end
 
+	if playerInventory.ignition and inventory.id == playerInventory.ignition then
+		return 'ignition'
+	end
+
 	return inventory.id
 end
 
@@ -2328,13 +2437,20 @@ local function resolveSwapEndpoint(playerInventory, invType)
 		return Inventory.GetOpenContainer(playerInventory)
 	end
 
+	if invType == 'ignition' then
+		local ignition = Inventory.GetIgnition(playerInventory)
+
+		-- Only the ignition this inventory was opened with; a seat change mid-session closes it off.
+		return ignition and ignition.id == playerInventory.ignition and ignition or nil
+	end
+
 	return Inventory(playerInventory.open)
 end
 
 ---@param source number
 ---@param data SwapSlotData
 lib.callback.register('ox_inventory:swapItems', function(source, data)
-	if data.count < 1 then return end
+	if type(data) ~= 'table' or type(data.count) ~= 'number' or data.count < 1 or data.count % 1 ~= 0 then return end
 
 	local playerInventory = Inventory(source)
 
@@ -2416,6 +2532,14 @@ lib.callback.register('ox_inventory:swapItems', function(source, data)
         if data.count > fromData.count then
             data.count = fromData.count
         end
+
+		if toInventory.type == 'ignition' then
+			if data.fromType ~= 'player' or fromInventory ~= playerInventory or toData
+				or not matchesIgnition(fromData, toInventory.vehicleId) then return false end
+		elseif fromInventory.type == 'ignition' then
+			if data.toType ~= 'player' or toInventory ~= playerInventory or toData
+				or not matchesIgnition(fromData, fromInventory.vehicleId) then return false end
+		end
 
         if data.toType == 'newdrop' then
             local dropped, response = dropItem(source, playerInventory, fromInventory, fromData, data)
@@ -2714,6 +2838,14 @@ lib.callback.register('ox_inventory:swapItems', function(source, data)
 
 			Inventory.RefreshWorn(fromInventory, data.fromSlot)
 			Inventory.RefreshWorn(toInventory, data.toSlot)
+
+			local ignition = (toInventory.type == 'ignition' and toInventory)
+				or (fromInventory.type == 'ignition' and fromInventory) or nil
+
+			if ignition then
+				TriggerEvent('ox_inventory:ignitionUpdated', source, entities[ignition.vehicleId],
+					matchesIgnition(ignition.items[1], ignition.vehicleId) == true)
+			end
 
             CreateThread(function()
                 if sameInventory then
