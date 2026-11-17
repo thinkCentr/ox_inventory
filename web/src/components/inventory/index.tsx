@@ -4,9 +4,10 @@ import InventoryControl from './InventoryControl';
 import SettingsPanel from './SettingsPanel';
 import InventoryHotbar from './InventoryHotbar';
 import IgnitionSlot from './IgnitionSlot';
+import EcuSlot from './EcuSlot';
 import ClothingPanel from './ClothingPanel';
 import { useAppDispatch } from '../../store';
-import { refreshSlots, setIgnitionInventory, setAdditionalMetadata, setContainerInventory, setupInventory } from '../../store/inventory';
+import { refreshSlots, setIgnitionInventory, setEcuInventory, setAdditionalMetadata, setContainerInventory, setupInventory } from '../../store/inventory';
 import { useExitListener } from '../../hooks/useExitListener';
 import type { Inventory as InventoryProps } from '../../typings';
 import BackpackInventory, { useShowBackpack } from './BackpackInventory';
@@ -33,6 +34,7 @@ const Inventory: React.FC = () => {
   useNuiEvent<false>('closeInventory', () => {
     setInventoryVisible(false);
     dispatch(setIgnitionInventory(null));
+    dispatch(setEcuInventory(null));
     dispatch(closeContextMenu());
     dispatch(closeTooltip());
   });
@@ -43,6 +45,8 @@ const Inventory: React.FC = () => {
     rightInventory?: InventoryProps;
     backpackInventory?: InventoryProps;
     containerInventory?: InventoryProps;
+    ignitionInventory?: InventoryProps;
+    ecuInventory?: InventoryProps;
   }>('setupInventory', (data) => {
     dispatch(setupInventory(data));
     !inventoryVisible && setInventoryVisible(true);
@@ -54,6 +58,10 @@ const Inventory: React.FC = () => {
 
   useNuiEvent<InventoryProps | false>('setIgnition', (data) => {
     dispatch(setIgnitionInventory(data || null));
+  });
+
+  useNuiEvent<InventoryProps | false>('setEcu', (data) => {
+    dispatch(setEcuInventory(data || null));
   });
 
   useNuiEvent('refreshSlots', (data) => dispatch(refreshSlots(data)));
@@ -81,7 +89,7 @@ const Inventory: React.FC = () => {
 
             <div className="inventory-centre">
               {pedFocus && <ClothingPanel />}
-              <IgnitionSlot />
+              <div className="vehicle-ports"><IgnitionSlot /><EcuSlot /></div>
               <InventoryControl />
             </div>
 
