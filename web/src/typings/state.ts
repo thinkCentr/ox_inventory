@@ -18,6 +18,6 @@ export type State = {
     backpackInventory: Inventory;
     containerInventory: Inventory;
     ignitionInventory: Inventory;
-  ecuInventory: Inventory;
+    ecuInventory: Inventory;
   };
 };
