@@ -138,6 +138,10 @@ function db.saveStash(owner, dbId, inventory)
     return MySQL.prepare(Query.UPSERT_STASH, { inventory, owner and tostring(owner) or '', dbId })
 end
 
+function db.flushStash(owner, dbId, inventory)
+    return MySQL.update.await(Query.UPSERT_STASH, { inventory, owner and tostring(owner) or '', dbId })
+end
+
 function db.loadStash(owner, name)
     return MySQL.prepare.await(Query.SELECT_STASH, { owner and tostring(owner) or '', name })
 end

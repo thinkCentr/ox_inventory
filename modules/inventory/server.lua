@@ -1460,6 +1460,7 @@ local IGNITION_ITEM = 'vehicle_key'
 
 -- Bindings are created by trusted server callers after spawning an owned vehicle.
 local vehicleIds, entities, loading = {}, {}, {}
+local ignitionStorage = {}
 
 exports('BindVehicleIgnition', function(vehicle, vehicleId)
 	if type(vehicleId) ~= 'number' or vehicleId < 1 or vehicleId % 1 ~= 0 then return false end
@@ -2476,6 +2477,8 @@ lib.callback.register('ox_inventory:swapItems', function(source, data)
 	if not Grid.isSlotId(data.fromSlot, fromInventory.slots) then return false end
 	if not Grid.isSlotId(data.toSlot, data.toType == 'newdrop' and shared.dropslots or toInventory.slots) then return false end
 
+	if ignitionStorage[fromInventory.id] or ignitionStorage[toInventory.id] then return false end
+
 	local fromRef = ('%s:%s'):format(fromInventory.id, data.fromSlot)
 	local toRef = ('%s:%s'):format(toInventory.id, data.toSlot)
 
@@ -3274,7 +3277,7 @@ exports('GetItemCount', Inventory.GetItemCount)
 local function prepareInventorySave(inv, buffer, time)
     saveFastSlots(inv)
 
-    local shouldSave = not inv.datastore and inv.changed
+    local shouldSave = not ignitionStorage[inv.id] and not inv.datastore and inv.changed
     local n = 0
 
     for k, v in pairs(inv.items) do
@@ -3313,6 +3316,46 @@ local function prepareInventorySave(inv, buffer, time)
 end
 
 local isSaving = false
+local storageSequence = 0
+
+exports('BeginIgnitionStorage', function(vehicle, vehicleId)
+	local caller = GetInvokingResource()
+	if not caller or vehicleIds[vehicle] ~= vehicleId or isSaving then return end
+
+	local ignition = loadIgnition(vehicle)
+	if not ignition or vehicleIds[vehicle] ~= vehicleId or isSaving
+		or ignitionStorage[ignition.id] or activeSlots[ignition.id .. ':1'] then return end
+
+	storageSequence += 1
+	local entry = { caller = caller, token = storageSequence, vehicle = vehicle }
+	ignitionStorage[ignition.id] = entry
+
+	local ok, affected = pcall(db.flushStash, ignition.owner, ignition.dbId, json.encode(ignition:minimal()))
+	if not ok or type(affected) ~= 'number' or ignitionStorage[ignition.id] ~= entry or vehicleIds[vehicle] ~= vehicleId then
+		if ignitionStorage[ignition.id] == entry then ignitionStorage[ignition.id] = nil end
+		return
+	end
+
+	ignition.changed = false
+	return entry.token
+end)
+
+exports('EndIgnitionStorage', function(vehicle, token)
+	local caller = GetInvokingResource()
+	for id, entry in pairs(ignitionStorage) do
+		if entry.vehicle == vehicle and entry.token == token and entry.caller == caller then
+			ignitionStorage[id] = nil
+			return
+		end
+	end
+end)
+
+AddEventHandler('onResourceStop', function(resource)
+	for id, entry in pairs(ignitionStorage) do
+		if entry.caller == resource then ignitionStorage[id] = nil end
+	end
+end)
+
 local inventoryClearTime = GetConvarInt('inventory:cleartime', 5) * 60
 
 local function saveInventories(clearInventories)
@@ -3352,7 +3395,7 @@ local function saveInventories(clearInventories)
     if not clearInventories then return end
 
     for _, inv in pairs(Inventories) do
-        if not inv.open and not inv.player then
+        if not inv.open and not inv.player and not ignitionStorage[inv.id] then
             -- clear inventory from memory if unused for x minutes, or on entity/netid mismatch
             if inv.type == 'glovebox' or inv.type == 'trunk' then
                 if NetworkGetEntityFromNetworkId(inv.netid) ~= inv.entityId then
