@@ -784,7 +784,7 @@ local function openInventory(source, invType, data, ignoreSecurityChecks)
 		left:openInventory(left)
 	end
 
-	Inventory.OpenIgnition(left)
+	local ignitionInventory, ecuInventory = Inventory.OpenVehicleInterfaces(left)
 
 	return {
 		id = left.id,
@@ -792,7 +792,9 @@ local function openInventory(source, invType, data, ignoreSecurityChecks)
 		type = left.type,
 		slots = left.slots,
 		weight = left.weight,
-		maxWeight = left.maxWeight
+		maxWeight = left.maxWeight,
+        ignitionInventory = ignitionInventory,
+        ecuInventory = ecuInventory,
 	}, right and {
 		id = right.id,
 		label = right.player and '' or right.label,
