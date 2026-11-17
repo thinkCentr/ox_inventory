@@ -152,6 +152,7 @@ export const resolveInventoryPanel = (state: State, type: Inventory['type']): In
   if (type === InventoryType.PLAYER) return state.leftInventory;
   if (type === InventoryType.BACKPACK) return state.backpackInventory;
   if (type === InventoryType.IGNITION && state.ignitionInventory.id !== '') return state.ignitionInventory;
+  if (type === InventoryType.ECU && state.ecuInventory.id !== '') return state.ecuInventory;
   if (type === InventoryType.CONTAINER && hasContainerPanel(state)) return state.containerInventory;
 
   return state.rightInventory;
