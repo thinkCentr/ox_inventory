@@ -1457,64 +1457,140 @@ function Inventory.GetContainerPayload(inv)
 end
 
 local IGNITION_ITEM = 'vehicle_key'
-
--- Bindings are created by trusted server callers after spawning an owned vehicle.
-local vehicleIds, entities, loading = {}, {}, {}
+local PICK_ITEMS = { lockpick = true, advancedlockpick = true }
+-- Statebags mirror these server-owned bindings; clients never authorize Contact.
+local vehicleIds, entities, vehicleKinds, vehicleRevisions, loading = {}, {}, {}, {}, {}
 local ignitionStorage = {}
 
-exports('BindVehicleIgnition', function(vehicle, vehicleId)
-	if GetInvokingResource() ~= 'qbx_vehiclekeys' then return false end
-	if type(vehicleId) ~= 'number' or vehicleId < 1 or vehicleId % 1 ~= 0 then return false end
-	if type(vehicle) ~= 'number' or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then return false end
-	if vehicleIds[vehicle] and vehicleIds[vehicle] ~= vehicleId then return false end
-	if entities[vehicleId] and entities[vehicleId] ~= vehicle then return false end
+local function validIdentity(id, kind)
+    if kind == 'owned' then
+        return type(id) == 'number' and id >= 1 and id % 1 == 0
+    end
+    return kind == 'temporary' and type(id) == 'string' and #id <= 96
+        and id:match('^temp:[%w%-]+:%d+$') ~= nil
+end
 
-	vehicleIds[vehicle] = vehicleId
-	entities[vehicleId] = vehicle
-	return true
+exports('BindVehicleIgnition', function(vehicle, vehicleId, kind, revision)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' then return false end
+    kind, revision = kind or 'owned', revision or 1
+    if not validIdentity(vehicleId, kind) or type(revision) ~= 'number'
+        or revision < 1 or revision % 1 ~= 0 then return false end
+    if type(vehicle) ~= 'number' or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then return false end
+    if vehicleIds[vehicle] and (vehicleIds[vehicle] ~= vehicleId or vehicleKinds[vehicle] ~= kind) then return false end
+    if entities[vehicleId] and entities[vehicleId] ~= vehicle then return false end
+    vehicleIds[vehicle], vehicleKinds[vehicle], vehicleRevisions[vehicle] = vehicleId, kind, revision
+    entities[vehicleId] = vehicle
+    return true
 end)
 
 AddEventHandler('entityRemoved', function(vehicle)
-	local id = vehicleIds[vehicle]
-	if not id then return end
-	vehicleIds[vehicle] = nil
-	entities[id] = nil
+    local id = vehicleIds[vehicle]
+    if not id then return end
+    local kind = vehicleKinds[vehicle]
+    vehicleIds[vehicle], vehicleKinds[vehicle], vehicleRevisions[vehicle] = nil, nil, nil
+    entities[id] = nil
+    if kind == 'temporary' then
+        local ignition = Inventories['shift:ignition:' .. id]
+        if ignition then Inventory.Remove(ignition) end
+    end
 end)
 
-local function matchesIgnition(key, vehicleId)
-	return key and key.name == IGNITION_ITEM and key.count == 1
-		and key.metadata and key.metadata.vehicleId == vehicleId
+local function matchesIgnition(key, vehicleId, revision)
+    if not key or key.count ~= 1 or type(key.metadata) ~= 'table' then return false end
+    if key.name == IGNITION_ITEM then return key.metadata.vehicleId == vehicleId end
+    return PICK_ITEMS[key.name] == true and key.metadata.bound == true
+        and key.metadata.vehicleId == vehicleId and key.metadata.securityRevision == revision
+end
+
+local function canPlaceInIgnition(key, vehicleId)
+    if not key or key.count ~= 1 then return false end
+    if key.name == IGNITION_ITEM then
+        return type(key.metadata) == 'table' and key.metadata.vehicleId == vehicleId
+    end
+    if not PICK_ITEMS[key.name] then return false end
+    local meta = key.metadata or {}
+    return meta.vehicleId == nil or (meta.bound == true and meta.vehicleId == vehicleId)
 end
 
 local function loadIgnition(vehicle)
-	local vehicleId = vehicleIds[vehicle]
-	if not vehicleId or not DoesEntityExist(vehicle) then return end
-
-	local id = ('shift:ignition:%d'):format(vehicleId)
-	local ignition = Inventories[id]
-
-	if not ignition and not loading[id] then
-		loading[id] = true
-		local guard <close> = defer(function() loading[id] = nil end)
-		ignition = Inventory.Create(id, 'Contact', 'ignition', 1, 0, 1000, false)
-	end
-
-	if ignition and vehicleIds[vehicle] == vehicleId then
-		ignition.vehicleId = vehicleId
-		ignition.time = os.time()
-		return ignition
-	end
+    local id = vehicleIds[vehicle]
+    if not id or not DoesEntityExist(vehicle) then return end
+    local invId = 'shift:ignition:' .. tostring(id)
+    local ignition = Inventories[invId]
+    if not ignition and not loading[invId] then
+        loading[invId] = true
+        local guard <close> = defer(function() loading[invId] = nil end)
+        if vehicleKinds[vehicle] == 'temporary' then
+            -- Empty items bypass DB loading; datastore excludes this inventory from DB saves.
+            ignition = Inventory.Create(invId, 'Contact', 'ignition', 1, 0, 1000, false, {})
+            if ignition then ignition.datastore = true end
+        else
+            ignition = Inventory.Create(invId, 'Contact', 'ignition', 1, 0, 1000, false)
+        end
+    end
+    if ignition and vehicleIds[vehicle] == id then
+        ignition.vehicleId, ignition.securityRevision = id, vehicleRevisions[vehicle] or 1
+        ignition.time = os.time()
+        return ignition
+    end
 end
 
 function Inventory.HasIgnitionKey(vehicle)
-	local ignition = loadIgnition(vehicle)
-	return ignition ~= nil and matchesIgnition(ignition.items[1], ignition.vehicleId) == true
+    local ignition = loadIgnition(vehicle)
+    return ignition ~= nil
+        and matchesIgnition(ignition.items[1], ignition.vehicleId, ignition.securityRevision) == true
 end
-
 exports('HasIgnitionKey', Inventory.HasIgnitionKey)
+exports('GetIgnitionVehicleId', function(vehicle) return vehicleIds[vehicle] end)
+exports('GetIgnitionVehicleKind', function(vehicle) return vehicleKinds[vehicle] end)
+exports('GetIgnitionSecurityRevision', function(vehicle) return vehicleRevisions[vehicle] end)
 
-exports('GetIgnitionVehicleId', function(vehicle)
-	return vehicleIds[vehicle]
+exports('SetIgnitionSecurityRevision', function(vehicle, revision)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' or not vehicleIds[vehicle]
+        or type(revision) ~= 'number' or revision < 1 or revision % 1 ~= 0 then return false end
+    vehicleRevisions[vehicle] = revision
+    local ignition = loadIgnition(vehicle)
+    if ignition then ignition.securityRevision = revision end
+    return true
+end)
+
+exports('InsertAmbientIgnitionKey', function(vehicle, id)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' or vehicleKinds[vehicle] ~= 'temporary'
+        or vehicleIds[vehicle] ~= id then return false end
+    local ignition = loadIgnition(vehicle)
+    if not ignition or ignition.items[1] then return false end
+    return Inventory.AddItem(ignition.id, IGNITION_ITEM, 1,
+        { vehicleId = id, ambient = true, description = 'Clé du véhicule' }, 1) == true
+end)
+
+exports('RemoveAmbientIgnitionKey', function(vehicle)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' or vehicleKinds[vehicle] ~= 'temporary' then return false end
+    local ignition = loadIgnition(vehicle)
+    local key = ignition and ignition.items[1]
+    if not key or key.name ~= IGNITION_ITEM or not key.metadata or key.metadata.ambient ~= true
+        or key.metadata.vehicleId ~= ignition.vehicleId then return false end
+    return Inventory.RemoveItem(ignition.id, IGNITION_ITEM, 1, key.metadata, 1, false, true) == true
+end)
+
+exports('GetIgnitionTool', function(vehicle)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' then return end
+    local ignition = loadIgnition(vehicle)
+    local item = ignition and ignition.items[1]
+    return item and { name = item.name, metadata = table.clone(item.metadata or {}) } or nil
+end)
+
+exports('BindIgnitionPick', function(vehicle, revision)
+    if GetInvokingResource() ~= 'qbx_vehiclekeys' or vehicleRevisions[vehicle] ~= revision then return false end
+    local ignition = loadIgnition(vehicle)
+    if not ignition or ignitionStorage[ignition.id] or activeSlots[ignition.id .. ':1'] then return false end
+    local item = ignition.items[1]
+    if not item or not PICK_ITEMS[item.name] or not canPlaceInIgnition(item, ignition.vehicleId)
+        or (item.metadata and item.metadata.bound) then return false end
+    local metadata = table.clone(item.metadata or {})
+    metadata.bound, metadata.vehicleId, metadata.securityRevision = true, ignition.vehicleId, revision
+    metadata.label, metadata.description = 'Clé improvisée', 'Crochet lié à ce véhicule; une reprogrammation peut le désactiver.'
+    Inventory.SetMetadata(ignition.id, 1, metadata)
+    return matchesIgnition(ignition.items[1], ignition.vehicleId, revision) == true
 end)
 
 ---The ignition of the vehicle this player is driving. Re-checked on every use, so a passenger or
@@ -2542,10 +2618,10 @@ lib.callback.register('ox_inventory:swapItems', function(source, data)
 
 		if toInventory.type == 'ignition' then
 			if data.fromType ~= 'player' or fromInventory ~= playerInventory or toData
-				or not matchesIgnition(fromData, toInventory.vehicleId) then return false end
+				or not canPlaceInIgnition(fromData, toInventory.vehicleId) then return false end
 		elseif fromInventory.type == 'ignition' then
 			if data.toType ~= 'player' or toInventory ~= playerInventory or toData
-				or not matchesIgnition(fromData, fromInventory.vehicleId) then return false end
+				or not canPlaceInIgnition(fromData, fromInventory.vehicleId) then return false end
 		end
 
         if data.toType == 'newdrop' then
@@ -2851,7 +2927,7 @@ lib.callback.register('ox_inventory:swapItems', function(source, data)
 
 			if ignition then
 				TriggerEvent('ox_inventory:ignitionUpdated', source, entities[ignition.vehicleId],
-					matchesIgnition(ignition.items[1], ignition.vehicleId) == true)
+					matchesIgnition(ignition.items[1], ignition.vehicleId, ignition.securityRevision) == true)
 			end
 
             CreateThread(function()
@@ -3396,7 +3472,8 @@ local function saveInventories(clearInventories)
     if not clearInventories then return end
 
     for _, inv in pairs(Inventories) do
-        if not inv.open and not inv.player and not ignitionStorage[inv.id] then
+        if not inv.open and not inv.player and not ignitionStorage[inv.id]
+            and not (inv.type == 'ignition' and inv.datastore) then
             -- clear inventory from memory if unused for x minutes, or on entity/netid mismatch
             if inv.type == 'glovebox' or inv.type == 'trunk' then
                 if NetworkGetEntityFromNetworkId(inv.netid) ~= inv.entityId then
