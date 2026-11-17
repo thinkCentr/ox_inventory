@@ -888,6 +888,7 @@ return {
         stack = false,
         close = false,
         consume = 0,
+        client = { event = 'lockpicks:UseLockpick' },
     },
 
     ['ecu_programmer'] = {
@@ -1906,6 +1907,7 @@ return {
         stack = false,
         close = false,
         consume = 0,
+        client = { event = 'lockpicks:UseLockpick' },
     },
 
     ['screwdriverset'] = {
