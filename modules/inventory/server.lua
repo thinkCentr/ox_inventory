@@ -1463,7 +1463,7 @@ local vehicleIds, entities, loading = {}, {}, {}
 
 exports('BindVehicleIgnition', function(vehicle, vehicleId)
 	if type(vehicleId) ~= 'number' or vehicleId < 1 or vehicleId % 1 ~= 0 then return false end
-	if not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then return false end
+	if type(vehicle) ~= 'number' or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then return false end
 	if vehicleIds[vehicle] and vehicleIds[vehicle] ~= vehicleId then return false end
 	if entities[vehicleId] and entities[vehicleId] ~= vehicle then return false end
 
@@ -1535,10 +1535,13 @@ end
 ---Attach the ignition to a player opening their inventory, or tell the client there is none.
 ---@param inv OxInventory
 function Inventory.OpenIgnition(inv)
+	local previous = inv.ignition and Inventories[inv.ignition]
+	if previous then previous.openedBy[inv.id] = nil end
+	inv.ignition = nil
+
 	local ignition = Inventory.GetIgnition(inv)
 
 	if not ignition then
-		inv.ignition = nil
 		return TriggerClientEvent('ox_inventory:setIgnition', inv.id, nil)
 	end
 

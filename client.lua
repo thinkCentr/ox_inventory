@@ -1008,6 +1008,17 @@ function client.closeInventory(server)
 end
 
 RegisterNetEvent('ox_inventory:closeInventory', client.closeInventory)
+
+local function clearIgnitionContext()
+    if not currentIgnition then return end
+    currentIgnition = nil
+    SendNUIMessage({ action = 'setIgnition', data = false })
+end
+
+lib.onCache('vehicle', clearIgnitionContext)
+lib.onCache('seat', function(seat)
+    if seat ~= -1 then clearIgnitionContext() end
+end)
 exports('closeInventory', client.closeInventory)
 
 ---@param data updateSlot[]
