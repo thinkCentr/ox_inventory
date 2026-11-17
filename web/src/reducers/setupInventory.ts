@@ -26,8 +26,8 @@ export const setupInventoryReducer: CaseReducer<
     rightInventory?: Inventory;
     backpackInventory?: Inventory;
     containerInventory?: Inventory;
-    ignitionInventory?: Inventory;
-    ecuInventory?: Inventory;
+    ignitionInventory?: Inventory | false;
+    ecuInventory?: Inventory | false;
   }>
 > = (state, action) => {
   const { leftInventory, rightInventory, backpackInventory, containerInventory, ignitionInventory, ecuInventory } = action.payload;
@@ -63,12 +63,15 @@ export const setupInventoryReducer: CaseReducer<
     state.containerInventory = createEmptyInventory();
   }
 
-  state.ignitionInventory = ignitionInventory
-    ? { ...ignitionInventory, items: densifyItems(ignitionInventory, curTime) }
-    : createEmptyInventory();
-  state.ecuInventory = ecuInventory
-    ? { ...ecuInventory, items: densifyItems(ecuInventory, curTime) }
-    : createEmptyInventory();
+  // Internal slot-count refreshes call this reducer without port payloads; preserve them.
+  if (ignitionInventory !== undefined)
+    state.ignitionInventory = ignitionInventory
+      ? { ...ignitionInventory, items: densifyItems(ignitionInventory, curTime) }
+      : createEmptyInventory();
+  if (ecuInventory !== undefined)
+    state.ecuInventory = ecuInventory
+      ? { ...ecuInventory, items: densifyItems(ecuInventory, curTime) }
+      : createEmptyInventory();
 
   state.shiftPressed = false;
   state.isBusy = false;
