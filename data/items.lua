@@ -882,9 +882,22 @@ return {
     },
 
     ['lockpick'] = {
-        label = 'Lockpick',
+        label = 'Crochet de démarrage',
         rarity = 'common',
         weight = 160,
+        stack = false,
+        close = false,
+        consume = 0,
+    },
+
+    ['ecu_programmer'] = {
+        label = 'Programmateur ECU',
+        rarity = 'uncommon',
+        weight = 650,
+        stack = false,
+        close = false,
+        consume = 0,
+        description = 'Outil électronique pour contourner les antidémarrages modernes.',
     },
 
     ['phone'] = {
@@ -1887,9 +1900,12 @@ return {
     },
 
     ['advancedlockpick'] = {
-        label = 'Advanced Lockpick',
+        label = 'Crochet de précision',
         rarity = 'uncommon',
         weight = 500,
+        stack = false,
+        close = false,
+        consume = 0,
     },
 
     ['screwdriverset'] = {
