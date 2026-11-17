@@ -1463,6 +1463,7 @@ local vehicleIds, entities, loading = {}, {}, {}
 local ignitionStorage = {}
 
 exports('BindVehicleIgnition', function(vehicle, vehicleId)
+	if GetInvokingResource() ~= 'qbx_vehiclekeys' then return false end
 	if type(vehicleId) ~= 'number' or vehicleId < 1 or vehicleId % 1 ~= 0 then return false end
 	if type(vehicle) ~= 'number' or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then return false end
 	if vehicleIds[vehicle] and vehicleIds[vehicle] ~= vehicleId then return false end
@@ -3320,7 +3321,7 @@ local storageSequence = 0
 
 exports('BeginIgnitionStorage', function(vehicle, vehicleId)
 	local caller = GetInvokingResource()
-	if not caller or vehicleIds[vehicle] ~= vehicleId or isSaving then return end
+	if caller ~= 'tc_garages' or vehicleIds[vehicle] ~= vehicleId or isSaving then return end
 
 	local ignition = loadIgnition(vehicle)
 	if not ignition or vehicleIds[vehicle] ~= vehicleId or isSaving
