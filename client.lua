@@ -349,8 +349,8 @@ function client.openInventory(inv, data)
             leftInventory = left,
             rightInventory = currentInventory,
             backpackInventory = backpackInventory,
-            ignitionInventory = left.ignitionInventory,
-            ecuInventory = left.ecuInventory
+            ignitionInventory = left.ignitionInventory or false,
+            ecuInventory = left.ecuInventory or false
         }
     })
 
