@@ -13,11 +13,11 @@ import { getBooleanPref } from '../../store/preferences';
 import { KeyIcon } from '../utils/icons';
 import ItemImage from '../utils/ItemImage';
 
-// Mirrors IGNITION_ITEM on the server, which is what actually enforces it.
-const IGNITION_ITEM = 'vehicle_key';
+// The server validates the exact vehicle ID, bound pick and security revision.
+const CONTACT_ITEMS = new Set(['vehicle_key', 'lockpick', 'advancedlockpick']);
 const IGNITION_SLOT = 1;
 
-/** The driver's ignition: a single slot that only takes a vehicle key. Hidden for everyone else. */
+/** The driver's Contact: accepts a matching physical key or a mechanical bypass tool. */
 const IgnitionSlot: React.FC = () => {
   const manager = useDragDropManager();
   const dispatch = useAppDispatch();
@@ -54,7 +54,7 @@ const IgnitionSlot: React.FC = () => {
       },
       canDrop: (source) =>
         !isSlotWithItem(item) && source.inventory === InventoryType.PLAYER &&
-        source.item.name === IGNITION_ITEM,
+        CONTACT_ITEMS.has(source.item.name),
     }),
     [dispatch, item]
   );
