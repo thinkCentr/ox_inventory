@@ -45,8 +45,8 @@ const Inventory: React.FC = () => {
     rightInventory?: InventoryProps;
     backpackInventory?: InventoryProps;
     containerInventory?: InventoryProps;
-    ignitionInventory?: InventoryProps;
-    ecuInventory?: InventoryProps;
+    ignitionInventory?: InventoryProps | false;
+    ecuInventory?: InventoryProps | false;
   }>('setupInventory', (data) => {
     dispatch(setupInventory(data));
     !inventoryVisible && setInventoryVisible(true);
